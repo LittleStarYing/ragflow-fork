@@ -24,19 +24,26 @@ redis:
   db: 1
   password: '${REDIS_PASSWORD:-infini_rag_flow}'
   host: '${REDIS_HOST:-redis}:6379'
-
 postgres:
-  db_name: '${POSTGRES_DBNAME:-ragflow}'
-  user: '${POSTGRES_USER:-postgres}'
+  name: '${POSTGRES_DBNAME:-rag_flow}'
+  user: '${POSTGRES_USER:-rag_flow}'
   password: '${POSTGRES_PASSWORD:-infini_rag_flow}'
   host: '${POSTGRES_HOST:-postgres}'
   port: 5432
-  pool_min_size: 1
-  pool_max_size: 10
+  max_connections: 100
+  stale_timeout: 30
+
 # s3:
 #   access_key: 'access_key'
 #   secret_key: 'secret_key'
 #   region: 'region'
+# oss:
+#   access_key: '${ACCESS_KEY}'
+#   secret_key: '${SECRET_KEY}'
+#   endpoint_url: '${ENDPOINT}'
+#   region: '${REGION}'
+#   bucket: '${BUCKET}'
+#   prefix_path: '${OSS_PREFIX_PATH}'
 # azure:
 #   auth_type: 'sas'
 #   container_url: 'container_url'

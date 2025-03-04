@@ -18,6 +18,7 @@ from datetime import date
 from enum import IntEnum, Enum
 import rag.utils.es_conn
 import rag.utils.infinity_conn
+import rag.utils.pg_conn
 
 import rag.utils
 from rag.nlp import search
@@ -52,6 +53,9 @@ CLIENT_AUTHENTICATION = None
 HTTP_APP_KEY = None
 GITHUB_OAUTH = None
 FEISHU_OAUTH = None
+
+# PostgreSQL configuration
+POSTGRES = None
 
 DOC_ENGINE = None
 docStoreConn = None
@@ -114,13 +118,21 @@ def init_settings():
     GITHUB_OAUTH = get_base_config("oauth", {}).get("github")
     FEISHU_OAUTH = get_base_config("oauth", {}).get("feishu")
 
+    # Load PostgreSQL configuration
+    global POSTGRES
+    POSTGRES = get_base_config("postgres", {})
+
     global DOC_ENGINE, docStoreConn, retrievaler, kg_retrievaler
     DOC_ENGINE = os.environ.get('DOC_ENGINE', "elasticsearch")
     lower_case_doc_engine = DOC_ENGINE.lower()
+    lower_case_doc_engine = "postgresql"
     if lower_case_doc_engine == "elasticsearch":
         docStoreConn = rag.utils.es_conn.ESConnection()
     elif lower_case_doc_engine == "infinity":
         docStoreConn = rag.utils.infinity_conn.InfinityConnection()
+    elif lower_case_doc_engine == "postgresql":
+        print(f"Initializing PostgreSQL connection with engine: {DOC_ENGINE}")
+        docStoreConn = rag.utils.pg_conn.PostgresConnection()
     else:
         raise Exception(f"Not supported doc engine: {DOC_ENGINE}")
 

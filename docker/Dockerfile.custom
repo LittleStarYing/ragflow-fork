@@ -1,0 +1,21 @@
+FROM infiniflow/ragflow:v0.16.0
+
+# 复制本地修改后的代码到容器中
+COPY ../api /ragflow/api
+COPY ../rag /ragflow/rag
+COPY ../conf /ragflow/conf
+COPY ../deepdoc /ragflow/deepdoc
+COPY ../agent /ragflow/agent
+COPY ../graphrag /ragflow/graphrag
+
+# 安装 PostgreSQL 相关依赖
+RUN pip install psycopg2-binary pgvector 
+
+# 设置工作目录
+WORKDIR /ragflow
+
+# 暴露端口
+EXPOSE 9380
+
+# 启动命令保持不变
+CMD ["/ragflow/docker/start.sh"]

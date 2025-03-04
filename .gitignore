@@ -38,3 +38,15 @@ sdk/python/dist/
 sdk/python/ragflow_sdk.egg-info/
 huggingface.co/
 nltk_data/
+
+
+# Chrome and driver files
+chrome*
+chromedriver*
+
+# Binary files
+*.jar*
+*.tiktoken
+*.deb
+
+tt.txt

@@ -74,6 +74,16 @@ def list_chunk():
                 "available_int": int(sres.field[id].get("available_int", 1)),
                 "positions": sres.field[id].get("position_int", []),
             }
+            # 处理 position_int 字段
+            # if isinstance(d["positions"], str):
+            #     try:
+            #         # 尝试解析 JSON 字符串
+            #         import json
+            #         d["positions"] = json.loads(d["positions"])
+            #     except json.JSONDecodeError:
+            #         # 如果不是有效的 JSON，尝试旧格式的解析
+            #         d["positions"] = [list(map(int, pos.split("_"))) for pos in d["positions"].split(",") if pos] or []
+            
             assert isinstance(d["positions"], list)
             assert len(d["positions"]) == 0 or (isinstance(d["positions"][0], list) and len(d["positions"][0]) == 5)
             res["chunks"].append(d)

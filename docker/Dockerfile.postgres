@@ -1,0 +1,11 @@
+FROM ragflow-base:latest
+
+# 复制PostgreSQL配置模板文件
+COPY docker/service_conf_pg.yaml.template /ragflow/conf/service_conf.yaml.template
+
+# 设置环境变量
+ENV DOC_ENGINE=postgresql
+ENV PG_TEST=true
+
+# 使用原始entrypoint脚本
+ENTRYPOINT ["./entrypoint.sh"]

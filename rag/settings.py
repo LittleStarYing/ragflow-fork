@@ -23,6 +23,7 @@ RAG_CONF_PATH = os.path.join(get_project_base_directory(), "conf")
 
 ES = get_base_config("es", {})
 INFINITY = get_base_config("infinity", {"uri": "infinity:23817"})
+POSTGRES = get_base_config("postgres", {})
 AZURE = get_base_config("azure", {})
 S3 = get_base_config("s3", {})
 MINIO = decrypt_database_config(name="minio")

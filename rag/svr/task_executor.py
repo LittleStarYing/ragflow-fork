@@ -585,11 +585,11 @@ def do_handle_task(task):
     es_bulk_size = 4
     for b in range(0, len(chunks), es_bulk_size):
         doc_store_result = settings.docStoreConn.insert(chunks[b:b + es_bulk_size], search.index_name(task_tenant_id),
-                                                        task_dataset_id)
+                                                     task_dataset_id)
         if b % 128 == 0:
             progress_callback(prog=0.8 + 0.1 * (b + 1) / len(chunks), msg="")
         if doc_store_result:
-            error_message = f"Insert chunk error: {doc_store_result}, please check log file and Elasticsearch/Infinity status!"
+            error_message = f"Insert chunk error: {doc_store_result}, please check log file and Elasticsearch/Infinity status! data_pl1: {chunks[b:b + es_bulk_size]}, data_pl2:{search.index_name(task_tenant_id)}, data_pl3:{task_dataset_id}"
             progress_callback(-1, msg=error_message)
             raise Exception(error_message)
         chunk_ids = [chunk["id"] for chunk in chunks[:b + es_bulk_size]]

@@ -1,0 +1,48 @@
+CREATE TABLE IF NOT EXISTS "{table_name}" (
+    id VARCHAR(255) PRIMARY KEY,
+    doc_id VARCHAR(255) NOT NULL DEFAULT '',
+    kb_id VARCHAR(255) NOT NULL DEFAULT '',
+    create_time VARCHAR(255) NOT NULL DEFAULT '',
+    create_timestamp_flt FLOAT NOT NULL DEFAULT 0.0,
+    img_id VARCHAR(255) NOT NULL DEFAULT '',
+    docnm_kwd TEXT NOT NULL DEFAULT '',
+    title_tks TEXT NOT NULL DEFAULT '',
+    title_sm_tks TEXT NOT NULL DEFAULT '',
+    name_kwd TEXT NOT NULL DEFAULT '',
+    important_kwd TEXT NOT NULL DEFAULT '',
+    tag_kwd TEXT NOT NULL DEFAULT '',
+    important_tks TEXT NOT NULL DEFAULT '',
+    question_kwd TEXT NOT NULL DEFAULT '',
+    question_tks TEXT NOT NULL DEFAULT '',
+    content_with_weight TEXT NOT NULL DEFAULT '',
+    content_ltks TEXT NOT NULL DEFAULT '',
+    content_sm_ltks TEXT NOT NULL DEFAULT '',
+    authors_tks TEXT NOT NULL DEFAULT '',
+    authors_sm_tks TEXT NOT NULL DEFAULT '',
+    page_num_int JSONB DEFAULT NULL,
+    top_int JSONB  DEFAULT NULL,
+    position_int JSONB DEFAULT NULL,
+    weight_int INTEGER NOT NULL DEFAULT 0,
+    weight_flt FLOAT NOT NULL DEFAULT 0.0,
+    rank_int INTEGER NOT NULL DEFAULT 0,
+    rank_flt FLOAT NOT NULL DEFAULT 0.0,
+    available_int INTEGER NOT NULL DEFAULT 1,
+    knowledge_graph_kwd TEXT NOT NULL DEFAULT '',
+    entities_kwd TEXT NOT NULL DEFAULT '',
+    pagerank_fea INTEGER NOT NULL DEFAULT 0,
+    tag_feas TEXT NOT NULL DEFAULT '',
+    from_entity_kwd TEXT NOT NULL DEFAULT '',
+    to_entity_kwd TEXT NOT NULL DEFAULT '',
+    entity_kwd TEXT NOT NULL DEFAULT '',
+    entity_type_kwd TEXT NOT NULL DEFAULT '',
+    source_id TEXT NOT NULL DEFAULT '',
+    n_hop_with_weight TEXT NOT NULL DEFAULT '',
+    removed_kwd TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建基础索引
+CREATE INDEX IF NOT EXISTS "idx_{table_name}_doc_id" ON "{table_name}"(doc_id);
+CREATE INDEX IF NOT EXISTS "idx_{table_name}_kb_id" ON "{table_name}"(kb_id);
+CREATE INDEX IF NOT EXISTS "idx_{table_name}_create_time" ON "{table_name}"(create_time);

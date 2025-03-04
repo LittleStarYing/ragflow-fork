@@ -5,16 +5,16 @@ mysql:
   name: 'rag_flow'
   user: 'root'
   password: 'infini_rag_flow'
-  host: 'mysql'
+  host: 'localhost'
   port: 5455
   max_connections: 100
   stale_timeout: 30
 minio:
   user: 'rag_flow'
   password: 'infini_rag_flow'
-  host: 'minio:9000'
+  host: 'localhost:9000'
 es:
-  hosts: 'http://es01:1200'
+  hosts: 'http://localhost:1200'
   username: 'elastic'
   password: 'infini_rag_flow'
 infinity:
@@ -23,16 +23,16 @@ infinity:
 redis:
   db: 1
   password: 'infini_rag_flow'
-  host: 'redis:6379'
+  host: 'localhost:6379'
 
-# postgres:
-#   name: 'rag_flow'
-#   user: 'rag_flow'
-#   password: 'infini_rag_flow'
-#   host: 'postgres'
-#   port: 5432
-#   max_connections: 100
-#   stale_timeout: 30
+postgres:
+  db_name: 'ragflow'
+  user: 'postgres'
+  password: 'infini_rag_flow'
+  host: 'localhost'
+  port: 5432
+  pool_min_size: 1
+  pool_max_size: 10
 # s3:
 #   access_key: 'access_key'
 #   secret_key: 'secret_key'
@@ -52,6 +52,12 @@ redis:
 #   factory: 'Tongyi-Qianwen'
 #   api_key: 'sk-xxxxxxxxxxxxx'
 #   base_url: ''
+#   default_models:
+#     chat_model: 'qwen-plus'
+#     embedding_model: 'BAAI/bge-large-zh-v1.5@BAAI'
+#     rerank_model: ''
+#     asr_model: ''
+#     image2text_model: ''
 # oauth:
 #   github:
 #     client_id: xxxxxxxxxxxxxxxxxxxxxxxxx

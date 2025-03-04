@@ -499,6 +499,7 @@ class InfinityConnection(DocStoreConnection):
                 if n in d:
                     continue
                 d[n] = [0] * vs
+        
         ids = ["'{}'".format(d["id"]) for d in docs]
         str_ids = ", ".join(ids)
         str_filter = f"id IN ({str_ids})"
