@@ -488,9 +488,11 @@ class PostgresConnection(DocStoreConnection):
                             try:
 
                                 cur.execute(query, params)
-                                rows = cur.fetchall()
+
                             except Exception as e:
                                 logger.error(f"Failed to excute query sql: {e}")
+
+                            rows = cur.fetchall()
                             
                             # 获取列名
                             columns = [desc[0] for desc in cur.description]
@@ -530,6 +532,8 @@ class PostgresConnection(DocStoreConnection):
                                 logger.info(f"No results found in {table_name}")
                 except Exception as e:
                     logger.error(f"Error searching {table_name}: {str(e)}")
+                    # raise
+
                     # 继续处理其他表
         
         # 合并结果
@@ -559,7 +563,7 @@ class PostgresConnection(DocStoreConnection):
         # 准备查询部分
         select_parts = [f"\"{field}\"" for field in selectFields if field != "_score"]
         where_parts = []
-        params = []
+        params = ['content_with_weight','q_1536_vec']
         limit_clause = None
 
         # 判断是什么得分方式
@@ -604,18 +608,32 @@ class PostgresConnection(DocStoreConnection):
                 
                 # 使用字段列表或默认的内容字段
                 search_fields = "content_with_weight"
-                if hasattr(match_expr, 'fields') and match_expr.fields:
-                    # 如果需要支持多字段，这里需要额外处理
-                    search_fields = match_expr.fields[0]  # 简化处理，仅使用第一个字段
+                weight_value = 1.0  # 默认权重
                 
-                # 使用统一的tsvector表达式避免重复计算
-                tsvector_expr = f"to_tsvector('simple', {search_fields})"
+                if hasattr(match_expr, 'fields') and match_expr.fields:
+                    # 处理可能带有权重的字段名，例如 title_tks^10
+                    field = match_expr.fields[0]  # 简化处理，仅使用第一个字段
+                    
+                    # 检查是否带有权重标记
+                    if '^' in field:
+                        field_parts = field.split('^')
+                        search_fields = field_parts[0]  # 实际字段名
+                        try:
+                            weight_value = float(field_parts[1])  # 权重值
+                            logger.info(f"Using weight {weight_value} for field {search_fields}")
+                        except (IndexError, ValueError):
+                            logger.warning(f"Invalid weight format in {field}, using default weight")
+                    else:
+                        search_fields = field
+                
+                # 使用统一的tsvector表达式避免重复计算 - 确保字段名被正确引用
+                tsvector_expr = f"to_tsvector('simple', \"{search_fields}\")"
                 
                 # 对内容字段应用全文搜索
                 where_parts.append(f"{tsvector_expr} @@ {tsquery_expr}")
                 
-                # 添加评分计算
-                select_parts.append(f"ts_rank_cd({tsvector_expr}, {tsquery_expr}) AS text_score")
+                # 添加带权重的评分计算
+                select_parts.append(f"ts_rank_cd({tsvector_expr}, {tsquery_expr}) * {weight_value} AS text_score")
                 
                 # 处理额外选项
                 if hasattr(match_expr, 'extra_options') and match_expr.extra_options:
@@ -625,76 +643,47 @@ class PostgresConnection(DocStoreConnection):
                         pass
             elif isinstance(match_expr, MatchDenseExpr):
                 has_vector_match = True
-                # 向量相似度搜索
+                
+                # 1. 获取向量数据并添加到参数
                 vector_data = self._prepare_vector(match_expr.embedding_data)
-                vector_clause = f"%s::vector"
+                vector_clause = "%s::vector"
                 params.append(vector_data)
                 
-                # 使用向量列名，如果未指定则使用默认的"embedding"
-                vector_column = "embedding"
-                if hasattr(match_expr, 'vector_column_name') and match_expr.vector_column_name:
-                    vector_column = match_expr.vector_column_name
+                # 2. 获取向量列名 - 默认使用q_1536_vec而非embedding
+                vector_column = getattr(match_expr, 'vector_column_name', "q_1536_vec")
                 
-                # 使用pgvector的相似度运算符
-                # <=> 是L2距离（欧氏距离）
-                # <#> 是负点积距离
-                # <-> 是余弦距离
+                # 3. 确定距离操作符 - 简化为单一逻辑
+                distance_type = (getattr(match_expr, 'distance_type', None) or 
+                                match_expr.extra_options.get("distance_type", "cosine")).lower()
                 
-                # 默认使用余弦距离，适合归一化向量
-                distance_operator = "<->"
+                distance_operator = {
+                    "l2": "<=>", 
+                    "euclidean": "<=>",
+                    "dot": "<#>", 
+                    "inner_product": "<#>",
+                    "cosine": "<->"
+                }.get(distance_type, "<->")  # 默认使用余弦距离
                 
-                # 首先检查match_expr中的distance_type
-                if hasattr(match_expr, 'distance_type') and match_expr.distance_type:
-                    distance_type = match_expr.distance_type.lower()
-                    if distance_type == "l2" or distance_type == "euclidean":
-                        distance_operator = "<=>"
-                    elif distance_type == "dot" or distance_type == "inner_product":
-                        distance_operator = "<#>"
-                    elif distance_type == "cosine":
-                        distance_operator = "<->"
-                # 然后检查extra_options中的distance_type（优先级较低）
-                elif "distance_type" in match_expr.extra_options:
-                    distance_type = match_expr.extra_options["distance_type"].lower()
-                    if distance_type == "l2" or distance_type == "euclidean":
-                        distance_operator = "<=>"
-                    elif distance_type == "dot" or distance_type == "inner_product":
-                        distance_operator = "<#>"
-                    elif distance_type == "cosine":
-                        distance_operator = "<->"
+                # 4. 构建相似度分数计算 - 使用变量避免重复
+                similarity_expr = f"(1 - (\"{vector_column}\" {distance_operator} {vector_clause}))"
+                select_parts.append(f"{similarity_expr} AS vector_score")
                 
-                # 使用1减去距离作为相似度分数（距离越小，相似度越高）
-                select_parts.append(f"(1 - (\"{vector_column}\" {distance_operator} {vector_clause})) AS vector_score")
+                # 5. 应用相似度阈值
+                threshold = match_expr.extra_options.get("similarity")
+                if threshold is not None:
+                    where_parts.append(f"{similarity_expr} > {float(threshold)}")
                 
-                # 如果有相似度阈值
-                if "similarity" in match_expr.extra_options:
-                    threshold = float(match_expr.extra_options["similarity"])
-                    # 确保使用与where子句相同的操作符
-                    where_parts.append(f"(1 - (\"{vector_column}\" {distance_operator} {vector_clause})) > {threshold}")
-                
-                # 添加向量索引提示，提高查询性能
-                # 这告诉PostgreSQL优先使用向量索引
-                
-                # 首先检查match_expr中的topn
-                if hasattr(match_expr, 'topn') and match_expr.topn > 0:
-                    top_k = match_expr.topn
-                    # 使用ORDER BY子句指定向量距离排序
-                    # 注意：这里我们希望距离越小越好，所以不需要取反
+                # 6. 设置排序和分页 - 简化为单一逻辑
+                top_k = getattr(match_expr, 'topn', None) or match_expr.extra_options.get("top_k")
+                if top_k:
+                    # Use the same parameterized approach for ordering
                     order_parts = [f"\"{vector_column}\" {distance_operator} {vector_clause}"]
-                    # 设置LIMIT子句
-                    limit_clause = top_k
-                # 然后检查extra_options中的top_k（优先级较低）
-                elif "top_k" in match_expr.extra_options:
-                    top_k = int(match_expr.extra_options["top_k"])
-                    # 使用ORDER BY子句指定向量距离排序
-                    # 注意：这里我们希望距离越小越好，所以不需要取反
-                    order_parts = [f"\"{vector_column}\" {distance_operator} {vector_clause}"]
-                    # 设置LIMIT子句
-                    limit_clause = top_k
+                    limit_clause = int(top_k)
         
         # 组合得分
         if has_text_match and has_vector_match:
-            vector_weight = 0.5  # 默认权重
-            text_weight = 0.5
+            vector_weight = 0.5  # 默认向量权重
+            text_weight = 0.5  # 默认纯文本权重
             
             # 查看是否有 FusionExpr 调整权重
             for match_expr in matchExprs:
@@ -726,6 +715,7 @@ class PostgresConnection(DocStoreConnection):
         from_clause = f"\"{table_name}\""
         where_clause = " AND ".join(where_parts) if where_parts else ""
         order_clause = ", ".join(order_parts) if order_parts else ""
+        params.append('q_1536_vec')
         
         return select_clause, from_clause, where_clause, order_clause, params, limit_clause
 
