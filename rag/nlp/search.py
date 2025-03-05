@@ -280,7 +280,25 @@ class Dealer:
         for chunk_id in sres.ids:
             vector = sres.field[chunk_id].get(vector_column, zero_vector)
             if isinstance(vector, str):
-                vector = [float(v) for v in vector.split("\t")]
+                # 尝试处理JSON格式的向量字符串
+                try:
+                    # 先检查是否是JSON数组格式 [...]
+                    if vector.startswith('[') and vector.endswith(']'):
+                        import json
+                        vector = json.loads(vector)
+                    else:
+                        # 回退到制表符分隔的格式
+                        vector = [float(v) for v in vector.split("\t")]
+                except Exception as e:
+                    logging.warning(f"Error parsing vector string: {e}")
+                    logging.warning(f"Vector string format: {vector[:100]}...")
+                    # 尝试一种替代方法：用逗号分隔并去除括号
+                    try:
+                        cleaned_vector = vector.strip('[]')
+                        vector = [float(v.strip()) for v in cleaned_vector.split(',')]
+                    except Exception as e2:
+                        logging.error(f"Failed alternative parsing: {e2}")
+                        vector = zero_vector
             ins_embd.append(vector)
         if not ins_embd:
             return [], [], []
