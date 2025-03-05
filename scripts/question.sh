@@ -14,4 +14,4 @@ curl 'http://localhost:9222/v1/chunk/retrieval_test' \
   -H 'sec-ch-ua: "Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"' \
   -H 'sec-ch-ua-mobile: ?0' \
   -H 'sec-ch-ua-platform: "macOS"' \
-  --data-raw '{"similarity_threshold":0.2,"vector_similarity_weight":0.30000000000000004,"use_kg":false,"question":"apm","doc_ids":[],"kb_id":"34178e2af8e411ef98a8c7b8a62886b7","page":1,"size":10}'
+  --data-raw '{"similarity_threshold":0.2,"vector_similarity_weight":0.30000000000000004,"use_kg":false,"question":"陈正英","doc_ids":[],"kb_id":"34178e2af8e411ef98a8c7b8a62886b7","page":1,"size":10}'

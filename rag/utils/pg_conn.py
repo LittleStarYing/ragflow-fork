@@ -485,13 +485,7 @@ class PostgresConnection(DocStoreConnection):
                     with self._get_connection() as conn:
                         with conn.cursor() as cur:
                             # 执行查询
-                            try:
-
-                                cur.execute(query, params)
-
-                            except Exception as e:
-                                logger.error(f"Failed to excute query sql: {e}")
-
+                            cur.execute(query, params)
                             rows = cur.fetchall()
                             
                             # 获取列名
@@ -521,7 +515,7 @@ class PostgresConnection(DocStoreConnection):
                                             except (json.JSONDecodeError, TypeError):
                                                 # 如果解析失败，保持原样
                                                 pass
-                                        item[col] = list(value)
+                                        item[col] = value
                                     data.append(item)
                                 
                                 # 创建DataFrame
@@ -563,7 +557,10 @@ class PostgresConnection(DocStoreConnection):
         # 准备查询部分
         select_parts = [f"\"{field}\"" for field in selectFields if field != "_score"]
         where_parts = []
-        params = ['content_with_weight','q_1536_vec']
+        params = []
+        if matchExprs:
+            params = ["content_with_weight", "q_1536_vec"]
+
         limit_clause = None
 
         # 判断是什么得分方式
@@ -598,6 +595,10 @@ class PostgresConnection(DocStoreConnection):
         tsquery_expr = None
         order_parts = []
         
+        text_where=[]
+        vector_where=[]
+        condition_where= where_parts.copy()
+        
         for match_expr in matchExprs:
             if isinstance(match_expr, MatchTextExpr):
                 has_text_match = True
@@ -612,6 +613,7 @@ class PostgresConnection(DocStoreConnection):
                 
                 if hasattr(match_expr, 'fields') and match_expr.fields:
                     # 处理可能带有权重的字段名，例如 title_tks^10
+                    # TODO 实现
                     field = match_expr.fields[0]  # 简化处理，仅使用第一个字段
                     
                     # 检查是否带有权重标记
@@ -630,9 +632,20 @@ class PostgresConnection(DocStoreConnection):
                 tsvector_expr = f"to_tsvector('simple', \"{search_fields}\")"
                 
                 # 对内容字段应用全文搜索
-                where_parts.append(f"{tsvector_expr} @@ {tsquery_expr}")
+                # 判断是否应用为硬性过滤条件
+                text_filter_mode = match_expr.extra_options.get("text_filter_mode", "hard")  # 默认硬性过滤
                 
-                # 添加带权重的评分计算
+                if text_filter_mode == "hard":
+                    # 硬性过滤模式 - 必须匹配文本搜索条件
+                    text_where.append(f"{tsvector_expr} @@ {tsquery_expr}")
+                elif text_filter_mode == "soft" and has_vector_match:
+                    # 软性过滤模式 - 不强制要求文本匹配，但影响评分
+                    pass  # 不添加到 where_parts中
+                else:
+                    # 默认添加到过滤条件
+                    text_where.append(f"{tsvector_expr} @@ {tsquery_expr}")
+                    
+                # 无论未决定硬性过滤与否，始终添加文本评分
                 select_parts.append(f"ts_rank_cd({tsvector_expr}, {tsquery_expr}) * {weight_value} AS text_score")
                 
                 # 处理额外选项
@@ -650,7 +663,7 @@ class PostgresConnection(DocStoreConnection):
                 params.append(vector_data)
                 
                 # 2. 获取向量列名 - 默认使用q_1536_vec而非embedding
-                vector_column = getattr(match_expr, 'vector_column_name', "q_1536_vec")
+                vector_column = getattr(match_expr, "vector_column_name", "q_1536_vec")
                 
                 # 3. 确定距离操作符 - 简化为单一逻辑
                 distance_type = (getattr(match_expr, 'distance_type', None) or 
@@ -668,37 +681,61 @@ class PostgresConnection(DocStoreConnection):
                 similarity_expr = f"(1 - (\"{vector_column}\" {distance_operator} {vector_clause}))"
                 select_parts.append(f"{similarity_expr} AS vector_score")
                 
-                # 5. 应用相似度阈值
+                # 5. 仅在明确请求时才应用相似度阈值（与ES保持一致）
                 threshold = match_expr.extra_options.get("similarity")
-                if threshold is not None:
-                    where_parts.append(f"{similarity_expr} > {float(threshold)}")
+                if threshold is not None and match_expr.extra_options.get("apply_threshold_filter", False):
+                    logger.info(f"应用向量相似度硬性过滤，阈值: {threshold}")
+                    vector_where.append(f"{similarity_expr} > {float(threshold)}")
                 
-                # 6. 设置排序和分页 - 简化为单一逻辑
+                # 6. 设置排序和分页 - 默认用于排序而非过滤
                 top_k = getattr(match_expr, 'topn', None) or match_expr.extra_options.get("top_k")
                 if top_k:
-                    # Use the same parameterized approach for ordering
+                    # 使用距离值作为排序依据（升序，距离越小越相似）
                     order_parts = [f"\"{vector_column}\" {distance_operator} {vector_clause}"]
                     limit_clause = int(top_k)
         
-        # 组合得分
+        # 组合得分 - 增强版
         if has_text_match and has_vector_match:
             vector_weight = 0.5  # 默认向量权重
             text_weight = 0.5  # 默认纯文本权重
+            hybrid_mode = "weighted_sum"  # 默认使用加权平均
             
-            # 查看是否有 FusionExpr 调整权重
+            # 查看是否有 FusionExpr 调整权重和模式
             for match_expr in matchExprs:
-                if isinstance(match_expr, FusionExpr) and match_expr.method == "weighted_sum" and "weights" in match_expr.fusion_params:
-                    weights = match_expr.fusion_params["weights"].split(",")
-                    if len(weights) >= 2:
-                        text_weight = float(weights[0])
-                        vector_weight = float(weights[1])
+                if isinstance(match_expr, FusionExpr):
+                    # 获取融合模式
+                    if match_expr.method in ["weighted_sum", "max_score", "min_score"]:
+                        hybrid_mode = match_expr.method
+                    
+                    # 获取权重
+                    if "weights" in match_expr.fusion_params:
+                        weights = match_expr.fusion_params["weights"].split(",")
+                        if len(weights) >= 2:
+                            text_weight = float(weights[0])
+                            vector_weight = float(weights[1])
             
-            # 创建组合得分
-            select_parts.append(f"((text_score * {text_weight}) + (vector_score * {vector_weight})) AS _score")
+            # 根据混合模式创建不同的组合得分
+            if hybrid_mode == "weighted_sum":
+                # 加权平均
+                select_parts.append(f"((text_score * {text_weight}) + (vector_score * {vector_weight})) AS _score")
+                logger.info(f"使用加权平均混合搜索: 文本={text_weight}, 向量={vector_weight}")
+            elif hybrid_mode == "max_score":
+                # 取最大分数
+                select_parts.append(f"GREATEST(text_score, vector_score) AS _score")
+                logger.info("使用最大分数混合搜索")
+            elif hybrid_mode == "min_score":
+                # 取最小分数
+                select_parts.append(f"LEAST(text_score, vector_score) AS _score")
+                logger.info("使用最小分数混合搜索")
+            else:
+                # 默认加权平均
+                select_parts.append(f"((text_score * {text_weight}) + (vector_score * {vector_weight})) AS _score")
         elif has_text_match:
             select_parts.append("text_score AS _score")
+            logger.info("仅使用文本搜索")
         elif has_vector_match:
             select_parts.append("vector_score AS _score")
+            logger.info("仅使用向量搜索")
         
         # 处理排序
         if not order_parts:  # 如果没有设置向量距离排序
@@ -713,9 +750,21 @@ class PostgresConnection(DocStoreConnection):
         # 组合查询部分
         select_clause = ", ".join(select_parts)
         from_clause = f"\"{table_name}\""
-        where_clause = " AND ".join(where_parts) if where_parts else ""
+        where_clause = ''
+
+        condition_clause = " AND ".join(condition_where) if condition_where else ""
+        text_clause = " AND ".join(text_where) if text_where else ""
+        if vector_where:
+            vector_clause = " AND ".join(vector_where) if vector_where else ""
+            where_clause = condition_clause + ' AND ( (' + text_clause + ') OR (' + vector_clause + ') )'
+        else:
+            where_clause = condition_clause + ' AND ' + text_clause
+        if where_clause.endswith(' AND '):
+            where_clause = where_clause[:-5]
+        # where_clause = " AND ".join(where_parts) if where_parts else ""
+        
         order_clause = ", ".join(order_parts) if order_parts else ""
-        params.append('q_1536_vec')
+        # params.append('q_1536_vec')
         
         return select_clause, from_clause, where_clause, order_clause, params, limit_clause
 
