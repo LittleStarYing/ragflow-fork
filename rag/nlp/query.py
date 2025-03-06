@@ -20,6 +20,7 @@ import re
 from rag.utils.doc_store_conn import MatchTextExpr
 
 from rag.nlp import rag_tokenizer, term_weight, synonym
+from rag.nlp.rag_tokenizer import is_chinese
 
 
 class FulltextQueryer:
@@ -128,7 +129,16 @@ class FulltextQueryer:
         for tt in self.tw.split(txt)[:256]:  # .split():
             if not tt:
                 continue
+            # 添加原始关键词
             keywords.append(tt)
+            
+            # 将中文词分解成单字并添加到关键词列表
+            # 检查是否是中文字符
+            if any(is_chinese(c) for c in tt):
+                # 添加每个单字
+                for char in tt:
+                    if is_chinese(char) and char not in keywords:
+                        keywords.append(char)
             twts = self.tw.weights([tt])
             syns = self.syn.lookup(tt)
             if syns and len(keywords) < 32:
@@ -149,12 +159,26 @@ class FulltextQueryer:
                     )
                     for m in sm
                 ]
-                sm = [FulltextQueryer.subSpecialChar(m) for m in sm if len(m) > 1]
-                sm = [m for m in sm if len(m) > 1]
+                # 保留所有长度的中文字符
+                all_sm = [FulltextQueryer.subSpecialChar(m) for m in sm]
+                # 过滤长度>1的词用于查询构建
+                sm = [m for m in all_sm if len(m) > 1]
 
                 if len(keywords) < 32:
-                    keywords.append(re.sub(r"[ \\\"']+", "", tk))
-                    keywords.extend(sm)
+                    clean_tk = re.sub(r"[ \\\"']+", "", tk)
+                    if clean_tk not in keywords:
+                        keywords.append(clean_tk)
+                    
+                    # 添加细粒度分词结果到关键词
+                    for m in all_sm:
+                        if m not in keywords and len(keywords) < 32:
+                            keywords.append(m)
+                            
+                    # 对于中文词汇，添加单个字符
+                    if any(is_chinese(c) for c in clean_tk):
+                        for char in clean_tk:
+                            if is_chinese(char) and char not in keywords and len(keywords) < 32:
+                                keywords.append(char)
 
                 tk_syns = self.syn.lookup(tk)
                 tk_syns = [FulltextQueryer.subSpecialChar(s) for s in tk_syns]

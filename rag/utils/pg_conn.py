@@ -624,7 +624,8 @@ class PostgresConnection(DocStoreConnection):
                     pattern = r'\(+([^\)^]+)\)+(?:\^[\d\.]+)?'
                     matches = re.findall(pattern, text)
                     if matches:
-                        return matches[0]  # 返回第一个匹配结果（主要关键词）
+                        str_om = matches[0].replace(' ','&') # 返回第一个匹配结果（主要关键词）
+                        return str_om
                     return text  # 如果没有匹配到模式，则返回原文本
                 
                 # 提取干净的查询关键词
@@ -731,12 +732,12 @@ class PostgresConnection(DocStoreConnection):
                                 match_expr.extra_options.get("distance_type", "cosine")).lower()
                 
                 distance_operator = {
-                    "l2": "<=>", 
+                    "cosine": "<=>", 
                     "euclidean": "<=>",
                     "dot": "<#>", 
                     "inner_product": "<#>",
-                    "cosine": "<->"
-                }.get(distance_type, "<->")  # 默认使用余弦距离
+                    "l2": "<->"
+                }.get(distance_type, "<=>")  # 默认使用余弦距离
 
                 logger.info(f"放入sql的向量数据: {vector_data}")
                 
