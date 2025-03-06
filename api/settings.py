@@ -125,13 +125,11 @@ def init_settings():
     global DOC_ENGINE, docStoreConn, retrievaler, kg_retrievaler
     DOC_ENGINE = os.environ.get('DOC_ENGINE', "elasticsearch")
     lower_case_doc_engine = DOC_ENGINE.lower()
-    lower_case_doc_engine = "postgresql"
     if lower_case_doc_engine == "elasticsearch":
         docStoreConn = rag.utils.es_conn.ESConnection()
     elif lower_case_doc_engine == "infinity":
         docStoreConn = rag.utils.infinity_conn.InfinityConnection()
     elif lower_case_doc_engine == "postgresql":
-        print(f"Initializing PostgreSQL connection with engine: {DOC_ENGINE}")
         docStoreConn = rag.utils.pg_conn.PostgresConnection()
     else:
         raise Exception(f"Not supported doc engine: {DOC_ENGINE}")
